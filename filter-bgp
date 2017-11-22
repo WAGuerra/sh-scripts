@@ -1,0 +1,60 @@
+#!/bin/bash
+# v1.0 bgp-filter
+#
+# Prints to default out bgp fields data
+#
+# Copyright 2017 Wladimir Guerra
+
+USAGE_MESSAGE="
+USAGE:
+	
+	$(basename $0) -s [separator] -q [d|s|n] [pcap-file]
+
+OPTIONS:
+
+-s [separator]
+	The data separator. Must be a valid character. For further 
+	details see tshark(1) -E separator option. The default is /t.
+
+-q [d|s|n]
+	Set quote character to surround fields. See tshark(1) -E 
+	quote option for further details.
+"
+
+SEPARATOR=/t
+QUOTE=n
+
+while getopts ":s:q:" opt
+do
+	case $opt in
+		s)
+			SEPARATOR=$OPTARG
+		;;
+		q)
+			QUOTE=$OPTARG
+	esac
+done
+
+# Shifts to the last argument
+shift $((OPTIND -1))
+
+if [ -z $1 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+if [ ! -f $1 ]; then
+	echo "[$1] is an invalid file." >&2
+	exit 1
+fi
+
+fields="\
+-e _ws.col.Time \
+-e frame.time_relative \
+-e ip.src \
+-e ip.dst \
+-e bgp.withdrawn_prefix \
+-e bgp.update.path_attribute.as_path_segment.as4 \
+-e bgp.nlri_prefix"
+
+tshark -T fields -E separator=$SEPARATOR -E quote=$QUOTE $fields -r $1 bgp.type==2

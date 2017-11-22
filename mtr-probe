@@ -1,0 +1,118 @@
+#!/bin/bash
+
+# default mtr sample is 1s
+# mtr count defaults to 300*1s=5min 
+MTR_COUNT=300
+MTR_LOG_PATH="/hostlab/_test/results/tcpdump"
+MTR_LOG_FILE="${MTR_LOG_PATH}/dump-$(pcap-file-index $MTR_LOG_PATH)--mtr.log"
+
+# This file is used to trigger up/donw interface on other 
+# machines
+MTR_FAIL_TRIGGER_FILE="${MTR_LOG_PATH}/dump-fail-test-trigger"
+
+mtr_run_count=1
+
+temp_file=".mtr-repo.tmp"
+
+USAGE_MESSAGE="
+USAGE:
+	$(basename $0) -c [count] -n [number of cycles] [address]
+
+	Record mtr to [address] data at [$MTR_LOG_FILE].
+OPTION:
+	-c [count]
+		Number of pings sent by mtr.
+	
+	-n [number of cycles]
+		How many times mtr will run.
+"
+
+while getopts ":c:n:" opt
+do
+	case $opt in
+		c)
+			MTR_COUNT=$OPTARG
+		;;
+		n)
+			mtr_run_count=$OPTARG
+		;;
+	esac
+done
+
+shift $((OPTIND-1))
+
+if [ -z $1 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+TARGET_ADDRESS=$1
+#The "raw" format is:
+#
+#hostline|xmitline|pingline|dnsline|timestampline
+#
+#hostline:
+# h <pos> <host IP>
+#
+#xmitline:
+# x <pos> <seqnum>
+#
+#pingline:
+# p <pos> <pingtime (ms)> <seqnum>
+#
+#dnsline: 
+# d <pos> <hostname>
+#
+#timestampline:
+# t <pos> <pingtime> <timestamp>
+#
+#
+#Timestampline is not  yet implemented. Need to find out how to do
+#ICMP timestamping first. :-)
+
+counter=1
+
+timestamp()
+{
+	date +%H:%M:%S.%N
+}
+
+while (( counter <= $mtr_run_count )); do
+	echo "$counter of $mtr_run_count"
+	mtr_start_ts="\"$(timestamp)\",,,,,\"$(hostname)->${TARGET_ADDRESS}\",\"start\""
+	echo "$mtr_start_ts"
+	
+	# signal to initiate up/down script
+	# for proper synchronization the number
+	# of pings must consider the wait time
+	# before down-up interface run
+	echo 1 > "$MTR_FAIL_TRIGGER_FILE"
+	echo "$mtr_start_ts" >> "$MTR_LOG_FILE"
+	
+	mtr -r -c "$MTR_COUNT" -o "LDRSAVM" $TARGET_ADDRESS | tail -n+2 > "$temp_file"
+	stop_ts=$(timestamp)
+	mtr_stop_ts="\"${stop_ts}\",,,,,\"$(hostname)->${TARGET_ADDRESS}\",\"stop\""
+	address=
+	dropped=
+	sent=
+	received=
+	
+	while IFS=$'\n' read -ra line
+	do
+		address="${address};$(echo "$line" | awk '{print $2}')"
+		dropped="${dropped};$(echo "$line" | awk '{print $4}')"
+		received="${received};$(echo "$line" | awk '{print $5}')"
+		sent="${sent};$(echo "$line" | awk '{print $5}')"
+		
+	done < "$temp_file"
+
+	echo "\"${stop_ts}\",\"${address}\",\"${dropped}\",\"${sent}\",\"${received}\",," >> "$MTR_LOG_FILE"
+	
+	
+	echo "$mtr_stop_ts" >> "$MTR_LOG_FILE"
+	
+	echo "$mtr_stop_ts
+	Data written to $MTR_LOG_FILE
+	"
+	let counter=counter+1
+done

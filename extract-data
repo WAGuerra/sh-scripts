@@ -1,0 +1,18 @@
+#!/bin/sh
+
+USAGE_MESSAGE="
+Usage:
+	$(basename $0) [index]
+
+"
+
+if [ -z $1 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+ls *iperf-${1}*.log | \
+while read -r filename || [ -n "$filname" ]
+do
+	./extract-iperf-data $filename
+done

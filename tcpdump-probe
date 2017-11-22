@@ -1,0 +1,177 @@
+#!/bin/bash
+# This script runs tcpdump on a specified interface
+# v1.2
+#
+# Version 1.0: Dump at specified interface
+# Version 1.1: If no interface is specified dump on all interfaces
+# Version 1.2: Dump all except 'lo'
+#
+# Copyright 2017 Wladimir Guerra
+
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+PCAP_FILES_PATH=/hostlab/_test/results/tcpdump
+
+#TODO incluir criação de PCAP_FILE_PATH se não existir
+
+USAGE_MESSAGE="
+Usage: $(basename $0) {start|stop|status|restart|force-reload} [interface] 
+:. E.g. '$(basename $0) start eth0' whoud start to monitor interface eth0
+"
+ 
+
+# Print the name of the pidfile for the parsed interface
+pidfile()
+{
+	# the $1 artument is the interface to monitor
+	echo "/var/run/tcpdump-$1.pid"
+}
+
+# Get pid number at the pidfile for the parsed inerface
+get_pid()
+{
+	# the $1 argument is the interface to monitor
+	cat `pidfile $1` 2>/dev/null
+}
+
+
+start()
+{
+	interface="$1"
+	pid_file=`pidfile $interface`
+	pid=`get_pid $interface`
+
+	#pcap_file_index=$(ls -l "$PCAP_FILES_PATH/"| egrep "dump-[0-9]*-$(hostname)-${interface}\\.pcap" | wc -l)
+	pcap_file_index=$(pcap-file-index "$PCAP_FILES_PATH")
+
+	[ -z "$pcap_file_index" ] && pcap_file_index=0
+
+	pcap_file=$PCAP_FILES_PATH/dump-${pcap_file_index}-$(hostname)-${interface}.pcap 
+
+	if kill -0 $pid 2>/dev/null ; then 
+		echo "tcpdump already running on $interface"
+		return 0
+	fi
+	
+	echo "Starting tcpdump on ${interface}"
+	echo "Data is recording at $pcap_file"
+
+	start-stop-daemon \
+	--start \
+	--make-pidfile \
+	--pidfile $pid_file \
+	--background \
+	--exec /usr/sbin/tcpdump \
+	-- \
+	-s 0 \
+	-w $pcap_file \
+	-U \
+	-i $interface \
+	-v \
+	-tttt
+}
+
+stop()
+{
+	pid_file=`pidfile $1`
+	
+	echo "Stopping monitoring $1..."
+
+	start-stop-daemon \
+	--stop \
+	--quiet \
+	--oknodo \
+	--pidfile $pid_file 
+
+	if [[ $? -eq 0 ]] ; then
+		rm $pid_file 2>/dev/null
+	fi
+
+	echo "Monitoring of $1 is stopped."
+}
+
+# --status option doesn't work on start-stop-daemon on netkit
+status()
+{
+#	pid_file= `pidfile $1`
+	
+	pid=`get_pid $1`
+	interface=$1
+
+	if  kill -0 $pid 2>/dev/null; then 
+		echo "tcpdump is monitoring $interface"
+		return 0
+	else
+		echo "tcpdump is not monitoring $interface"
+		return 0
+	fi
+#	start-stop-daemon \
+#	--status \
+#	--pidfile $pid_file
+	
+#	case "$?" in
+#		0)
+#			echo "tcpdump is running on $interface\n"
+#		;;
+#		1)
+#			echo "tcpdump is not running and the pid file $pid_file exist. It can and shoud be deleted.\n"
+#			rm -i $pid_file
+#		;;
+#		3)
+#			echo "tcpdump is not running\n"
+#		;;
+#		4)
+#			echo "unable to determine program status\n"
+#		;;
+#	esac
+}
+
+
+################
+# MAIN PROGRAM #
+################
+
+# The number of arguments must be 2
+#if [ $# -ne 2 ]; then
+#	echo "$USAGE_MESSAGE"
+#	exit 1
+#fi
+
+case "$1" in
+	start)
+		if [ -z $2 ]; then
+			echo "Starting to monitor all interfaces"
+			for interf in $(ls /sys/class/net); do
+				if [ "$interf" != "lo" ] && [ "$interf" != "teql0" ]; then
+					start "$interf"
+				fi
+			done
+		else
+			start $2
+		fi
+	;;
+	stop)
+		if [ -z $2 ]; then
+			echo "Stoping to monitor all interfaces"
+			for interf in $(ls /sys/class/net); do
+				stop "$interf"
+			done
+		else
+			stop $2
+		fi
+	;;
+	status)
+		status $2
+	;;
+	restart|force-reload)
+		$0 stop $2
+		sleep 1
+		$0 start $2
+	;;
+	*)
+		echo $USAGE_MESSAGE
+		exit 1
+	;;
+esac
+
+exit 0

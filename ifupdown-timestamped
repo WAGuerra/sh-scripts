@@ -1,0 +1,47 @@
+#!/bin/bash
+# ifdown-timestamped v1.0
+#
+# Turn up/down interface an record a timestamped log at PCAP_FILE_PATH.
+#
+# Copyright 2017 Wladimir Guerra
+
+USAGE_MESSAGE="
+$(basename $0) [interface] [up|down]
+"
+
+if [ $# -ne 2 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+if [ "$2" != "up" ] && [ "$2" != "down" ]; then
+	echo "Last argument must be [up|down]"
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+
+PCAP_FILE_PATH=/hostlab/_test/results/tcpdump
+
+# Index corresponding to the current tcpdump-probe .pcap file
+pcap_fidx=$(pcap-file-index "$PCAP_FILE_PATH")
+
+TIMESTAMP_FILE="$PCAP_FILE_PATH/dump-${pcap_fidx}-ifaces-up-down.log"
+router_log_file="$PCAP_FILE_PATH/dump-${pcap_fidx}--route-table-change.log"
+mtr_log_file="$PCAP_FILE_PATH/dump-${pcap_fidx}--mtr.log"
+# Get timestamp just before ifconfig command
+timestamp="$(date +%H:%M:%S.%N)"
+
+# Turn down interface
+ifconfig $1 $2
+
+# Record timestamped log
+if [ "$?" -eq 0 ]; then
+	echo "$1 is $2. Recording timestamp [${timestamp}] at $TIMESTAMP_FILE"
+	echo -e "\"$timestamp\",,,,,,,\"$(hostname)\",\"$1\",\"$2\"" >> "$TIMESTAMP_FILE"
+	echo -e "\"$timestamp\",\"$(hostname)\",\"$1\",\"$2\"" >> "$router_log_file"
+	echo -e "\"$timestamp\",,,,,,\"$(hostname)\",\"$1\",\"$2\"" >> "$mtr_log_file"
+else
+	echo "Error!"
+	exit 1
+fi

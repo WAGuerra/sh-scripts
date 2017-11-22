@@ -1,0 +1,105 @@
+#!/bin/bash
+# Copyright 2017 Wladimir Guerra
+
+USAGE_MESSAGE="
+Usage:
+	$(basename $0) -t -c [count] -d [down-time] -u [up-time] [interface]
+
+	OPTIONS
+		-t 
+		Use trigger file.
+
+		-c [count]
+		Loops [count] times. Default to 100.
+
+		-d [down-time]
+		Wait [down-time] after turning down interface. See sleep man page 
+		for further details.
+
+		-u [up-time]
+		Wait [up-time] after turning up interface. See sleep man page for
+		further details.
+"
+
+COUNT=100
+DOWN_WAIT=4m
+UP_WAIT=2m
+trigger_file="/hostlab/_test/results/tcpdump/dump-fail-test-trigger"
+use_trigger=false
+
+while getopts ":c:d:u:t" opt
+do
+	case $opt in
+		c)
+			COUNT=$OPTARG	
+		;;
+		d)
+			DOWN_WAIT=$OPTARG
+		;;
+		u)
+			UP_WAIT=$OPTARG
+		;;
+		t)
+			use_trigger=true
+		;;
+	esac
+done
+
+shift $((OPTIND -1))
+
+if [ -z $1 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+interface=$1
+
+COUNTER=1
+
+down-iface()
+{
+	echo "Turning down interface $1 at $(date -Isecond)"
+	ifupdown-timestamped $1 down
+}
+
+up-iface()
+{
+	echo "Turning up interface $1 at $(date -Isecond)"
+	ifupdown-timestamped $1 up
+}
+
+run-test()
+{
+	echo "Counting $COUNTER of $COUNT"
+	down-iface $1
+	sleep $DOWN_WAIT
+	up-iface $1
+	sleep $UP_WAIT
+}
+
+while (( COUNTER <= $COUNT )); do
+	if [ "$use_trigger" = true ]; then
+		echo -n "."
+		trigger=$(cat "$trigger_file")
+		if [ "$trigger" = 1 ]; then
+			echo -e "\nTrigger fired! Running test."
+			# Não roda de imediato. Dá um tempo para rodar o teste.
+			# Assim que o mtr roda espera ele enviar alguns pacotes
+			# para dar um down na interface.
+			sleep 2
+			iface_status="$(ip a | sed -rnu "/: ${interface}:.*<.*,UP/{N;N;s/.*inet (\S*).*/\1/p}")"
+			if [[ -n "$iface_status" ]]; then
+				down-iface $interface
+			else
+				up-iface $interface
+			fi
+			echo 0 > "$trigger_file"
+			#let COUNTER=COUNTER+1
+		fi
+		sleep 1
+	else
+		run-test $interface
+
+		let COUNTER=COUNTER+1
+	fi
+done

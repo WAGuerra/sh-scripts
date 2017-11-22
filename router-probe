@@ -1,0 +1,94 @@
+#!/bin/sh
+# This script monitor router table for changes and log it
+# v1.0
+#
+# Version 1.0 
+#
+# Copyright 2017 Wladimir Guerra 
+
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+PCAP_FILES_PATH=/hostlab/_test/results/tcpdump
+
+USAGE_MESSAGE="
+Usage: $(basename $0) {start|stop|status|restart|force-reload} 
+"
+
+# Print the name of the pidfile for the parsed interface
+pidfile()
+{
+	echo "/var/run/router-monior.pid"
+}
+
+# Get pid number at the pidfile for the parsed inerface
+get_pid()
+{
+	# the $1 argument is the interface to monitor
+	cat `pidfile` 2>/dev/null
+}
+
+
+start()
+{
+	pid_file=`pidfile`
+	pid=`get_pid`
+
+	pcap_file_index=$(pcap-file-index "$PCAP_FILES_PATH")
+
+	[ -z "$pcap_file_index" ] && pcap_file_index=0
+
+	if kill -0 $pid 2>/dev/null ; then 
+		echo "tcpdump already running on $interface"
+		return 0
+	fi
+
+	start-stop-daemon \
+	--start \
+	--make-pidfile \
+	--pidfile $pid_file \
+	--background \
+	--exec /usr/bin/monitor-route 
+}
+
+stop()
+{
+	pid_file=`pidfile $1`
+	
+	echo "Stopping monitoring $1..."
+
+	start-stop-daemon \
+	--stop \
+	--quiet \
+	--oknodo \
+	--pidfile $pid_file 
+
+	if [ $? -eq 0 ] ; then
+		rm $pid_file 2>/dev/null
+	fi
+
+	echo "Monitoring of $1 is stopped."
+}
+
+################
+# MAIN PROGRAM #
+################
+
+case "$1" in
+	start)
+		start 
+	;;
+	stop)
+		stop
+	;;
+	restart|force-reload)
+		$0 stop $2
+		sleep 1
+		$0 start $2
+	;;
+	*)
+		echo $USAGE_MESSAGE
+		exit 1
+	;;
+esac
+
+exit 0

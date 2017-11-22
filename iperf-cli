@@ -1,0 +1,58 @@
+#!/bin/sh
+
+result_path="/hostlab/_test/results"
+iperf_report_path="$result_path/iperf"
+dump_path="$result_path/tcpdump"
+index="$(pcap-file-index $dump_path)"
+iperf_file_det=""
+
+time_to_transmit=240
+interval=1
+
+USAGE_MESSAGE="
+Usage:
+	$(basename $0) -d [description] -t [seconds] -i [seconds]  [server-address]
+
+Options:
+	-d [description]
+		Append [description] to the end of report filename.
+	-t [seconds]
+		Time to run iperf client default to 240s (4 min). See iperf man page -t option for further details.
+	-i [seconds]
+		Report interval default to 30s. See iperf man page -i option for further details.
+	-h
+		Print this help
+"
+
+while getopts ":d:t:i" opt
+do
+	case $opt in
+		d)
+			iperf_file_det="${OPTARG}-"
+		;;
+		t)
+			time_to_transmit="$OPTARG"
+		;;
+		i)
+			interval="$OPTARG"
+		;;
+		*)
+			echo "$USAGE_MESSAGE"
+			exit 1
+		;;
+	esac
+done
+
+shift $((OPTIND - 1))
+
+if [ -z $1 ];then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+server_address=$1
+
+# Incluir interface de teste como parametro -c comentário
+iperf_cli_file="$iperf_report_path/${iperf_file_det}iperf-${index}-$(hostname)-cli.log"
+
+iperf -c "$server_address" -u -d -t "$time_to_transmit" -i "$interval" > "$iperf_cli_file"

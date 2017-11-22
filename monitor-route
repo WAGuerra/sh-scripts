@@ -1,0 +1,54 @@
+#!/bin/bash
+
+log_path="/hostlab/_test/results/tcpdump"
+log_file="$log_path/dump-$(pcap-file-index "$log_path")--route-table-change.log"
+route_data_file="$log_path/dump-$(pcap-file-index "$log_path")-$(hostname)--route-data.log"
+
+change_count=0
+
+
+timestamp()
+{
+	date +%H:%M:%S.%N
+}
+
+route-hash()
+{
+	echo "$(route | md5sum)"
+}
+
+write-log()
+{
+	echo "$(timestamp),$(hostname),$change_count,[$1]" >> "$log_file"
+}
+
+print-change-log()
+{
+	echo "$(timestamp)	$(hostname)	$change_count	[$1]"
+}
+
+print-route()
+{
+	route_table="\
+$(print-change-log $1)
+$(route | tail -n+3)
+"
+	echo "$route_table">>"$route_data_file"
+}
+
+route_table_hash=$(route-hash)
+print-change-log $route_table_hash
+write-log $route_table_hash
+print-route $route_table_hash
+
+while true
+do
+	if [[ "$route_table_hash" != "$(route-hash)" ]]; then
+		route_table_hash=$(route-hash)
+		change_count=$((change_count+1))
+		print-change-log $route_table_hash
+		write-log $route_table_hash
+		print-route $route_table_hash
+	fi
+	sleep 0.05
+done

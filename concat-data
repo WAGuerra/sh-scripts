@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Copyrigh 2017 Wladimir Guerra
+
+bold=$(tput bold)
+normal=$(tput sgr0)
+
+USAGE_MESSAGE="
+USAGE:
+$(basename $0) -f [filter] [index] 
+
+Concatenates dump data from specified ${bold}[index]${normal}.
+
+OPTIONS:
+
+-f [filter]
+	[filter] can be ${bold}bgp${normal}, ${bold}ospf${normal} or ${bold}rip${normal}.
+
+"
+DUMP_FILTER=bgp
+
+while getopts ":f:" opt
+do
+	case $opt in
+		f)
+			DUMP_FILTER=$OPTARG			
+		;;
+	esac
+done
+
+shift $((OPTIND-1))
+
+if [ -z $1 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+dump_index=$1
+dump_concat_file=dump-${dump_index}-data.csv
+filter_script="./filter-${DUMP_FILTER} -s , -q d $file_name" 
+echo "Executando filtro $filter_script"
+# Get files on current directory
+ls dump-${dump_index}-* | \
+while IFS= read -r file_name; do
+	if [[ $file_name == *".pcap"  ]]; then
+		echo "Adding data from pcap file [$file_name]"
+	    ./filter-${DUMP_FILTER} -s , -q d $file_name >> "$dump_concat_file"
+	elif [ $file_name == "dump-${dump_index}-ifaces-up-down.log" ]; then
+		echo "Adding data from iface log [$file_name]"
+		cat $file_name >> "$dump_concat_file"
+	fi
+done
+

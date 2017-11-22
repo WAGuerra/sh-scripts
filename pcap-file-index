@@ -1,0 +1,17 @@
+#!/bin/bash
+
+USAGE_MESSAGE="
+$(basename $0) [PATH] 
+
+Returns how many file dumps from tcpdump-probe of the [hostname]'s [interface] are at [PATH].
+
+"
+
+if [ $# -ne 1 ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+#ls -l "$1" | egrep "dump-[0-9]*-$2-$3\\.pcap" | wc -l
+
+cat "$1/dump-index"

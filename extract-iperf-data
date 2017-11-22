@@ -1,0 +1,41 @@
+#!/bin/sh
+
+USAGE_MESSAGE="
+Usage:
+	$(basename $0) [file]
+"
+
+#while getopts ":" opt
+#do
+#	case opt in
+#	esac
+#done
+
+filepath=$1
+
+if [ -z "$filepath" ]; then
+	echo "$USAGE_MESSAGE"
+	exit 1
+fi
+
+if [ ! -f $filepath ]; then
+	echo "Invalid file name [$filepath]"
+	exit 1
+fi
+
+fullfilename="$(basename $filepath)"
+
+# filename without extension
+filename="${fullfilename%.*}"
+
+data_file="${filename}-data.csv"
+summary_file="${filename}-summary.csv"
+
+
+all_data=$(cat $filepath | egrep '\[[[:blank:]]*[0-9]*\].*[0-9]*\.[0-9]* ms.*\([0-9]*\%\).*' | sed -r 's/-.[0-9]*\.[0-9]*|sec|\/|ms|\(|\%\)/ /g' | awk '{print $3,$8,$9,$10,$11}' | sed -r 's/ /,/g')
+
+echo "Saving data at $data_file"
+echo "$all_data" | head -n-2 > $data_file
+
+#echo "Saving summary at $summary_file"
+#echo "$all_data" | tail -n2 > $summary_file
