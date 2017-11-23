@@ -1,2 +1,2 @@
-# sh-scripts
-useful sh scripts
+# sh scripts for Network Analysis
+
